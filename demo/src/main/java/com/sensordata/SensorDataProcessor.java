@@ -2,6 +2,7 @@ package com.sensordata;
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
+import java.util.stream.IntStream;
 
 public class SensorDataProcessor{
 
@@ -15,56 +16,65 @@ public class SensorDataProcessor{
         this.limit = limit;
     }
 
-    // calculates average of sensor data
-    private double average(double[] array) {
-        int i = 0;
-        double val = 0;
-        for (i = 0; i < array.length; i++) {
-            val += array[i];
-        }
-
-        return val / array.length;
-    }
-
     // calculate data
     public void calculate(double d) {
 
         long startTime = System.nanoTime();
 
-        int i, j, k = 0;
-        double[][][] data2 = new double[data.length][data[0].length][data[0][0].length];
+        int iLen = data.length;
+        int jLen = data[0].length;
+        int kLen = data[0][0].length;
+        double invD = 1.0 / d;
 
-        BufferedWriter out;
+        double[][][] data2 = new double[iLen][jLen][kLen];
+        // Threshold comparisons avoid a per-iteration division: (sum/kLen)>10 ≡ sum>10*kLen
+        double loThresh = 10.0 * kLen;
+        double hiThresh = 50.0 * kLen;
+        double invKLen  = 1.0 / kLen;
 
         // Write racing stats data into a file
-        try {
-            out = new BufferedWriter(new FileWriter("RacingStatsData.txt"));
+        try (BufferedWriter out = new BufferedWriter(new FileWriter("RacingStatsData.txt"), 1 << 16)) {
 
-            for (i = 0; i < data.length; i++) {
-                for (j = 0; j < data[0].length; j++) {
-                    for (k = 0; k < data[0][0].length; k++) {
-                        data2[i][j][k] = data[i][j][k] / d - Math.pow(limit[i][j], 2.0);
+            // Compute phase: flatten i×j so ForkJoinPool can saturate all cores even when iLen is small
+            IntStream.range(0, iLen * jLen).parallel().forEach(ij -> {
+                int i = ij / jLen;
+                int j = ij % jLen;
+                double[] srcRow = data[i][j];
+                double[] dstRow = data2[i][j];
+                double limitSq = limit[i][j] * limit[i][j];
 
-                        if (average(data2[i][j]) > 10 && average(data2[i][j]) < 50)
-                            break;
-                        else if (Math.max(data[i][j][k], data2[i][j][k]) > data[i][j][k])
-                            break;
-                        else if (Math.pow(Math.abs(data[i][j][k]), 3) < Math.pow(Math.abs(data2[i][j][k]), 3)
-                                && average(data[i][j]) < data2[i][j][k] && (i + 1) * (j + 1) > 0)
-                            data2[i][j][k] *= 2;
-                        else
-                            continue;
+                // Inlined average: avoids method call overhead and reuses kLen directly
+                double sumSrc = 0.0;
+                for (int k = 0; k < kLen; k++) sumSrc += srcRow[k];
+                double avgSrc = sumSrc * invKLen;
+
+                double runningSum = 0.0;
+
+                for (int k = 0; k < kLen; k++) {
+                    double src = srcRow[k];
+                    double val = src * invD - limitSq;
+                    double rsPlusVal = runningSum + val;
+
+                    if (rsPlusVal > loThresh && rsPlusVal < hiThresh) {
+                        dstRow[k] = val;
+                        break;
+                    } else if (val > src) {
+                        dstRow[k] = val;
+                        break;
                     }
+                    // Write dstRow[k] exactly once — eliminates upfront write + potential overwrite
+                    double finalVal = (src * src < val * val && avgSrc < val) ? val * 2 : val;
+                    dstRow[k] = finalVal;
+                    runningSum += finalVal;
                 }
-            }
+            });
 
-            for (i = 0; i < data2.length; i++) {
-                for (j = 0; j < data2[0].length; j++) {
+            // Write phase: sequential — BufferedWriter is not thread-safe
+            for (int i = 0; i < iLen; i++) {
+                for (int j = 0; j < jLen; j++) {
                     out.write(data2[i][j] + "\t");
                 }
             }
-
-            out.close();
 
             long endTime = System.nanoTime();
             long elapsedMs = (endTime - startTime) / 1_000_000;

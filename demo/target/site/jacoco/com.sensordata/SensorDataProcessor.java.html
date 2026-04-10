@@ -2,6 +2,7 @@
 
 import java.io.BufferedWriter;
 import java.io.FileWriter;
+import java.util.stream.IntStream;
 
 public class SensorDataProcessor{
 
@@ -10,73 +11,85 @@ public class SensorDataProcessor{
     public double[][] limit;
 
     // constructor
-<span class="fc" id="L13">    public SensorDataProcessor(double[][][] data, double[][] limit) {</span>
-<span class="fc" id="L14">        this.data = data;</span>
-<span class="fc" id="L15">        this.limit = limit;</span>
-<span class="fc" id="L16">    }</span>
+<span class="fc" id="L14">    public SensorDataProcessor(double[][][] data, double[][] limit) {</span>
+<span class="fc" id="L15">        this.data = data;</span>
+<span class="fc" id="L16">        this.limit = limit;</span>
+<span class="fc" id="L17">    }</span>
 
     // calculates average of sensor data
     private double average(double[] array) {
-<span class="fc" id="L20">        int i = 0;</span>
-<span class="fc" id="L21">        double val = 0;</span>
-<span class="fc bfc" id="L22" title="All 2 branches covered.">        for (i = 0; i &lt; array.length; i++) {</span>
-<span class="fc" id="L23">            val += array[i];</span>
+<span class="fc" id="L21">        int i = 0;</span>
+<span class="fc" id="L22">        double val = 0;</span>
+<span class="fc bfc" id="L23" title="All 2 branches covered.">        for (i = 0; i &lt; array.length; i++) {</span>
+<span class="fc" id="L24">            val += array[i];</span>
         }
 
-<span class="fc" id="L26">        return val / array.length;</span>
+<span class="fc" id="L27">        return val / array.length;</span>
     }
 
     // calculate data
     public void calculate(double d) {
 
-<span class="fc" id="L32">        long startTime = System.nanoTime();</span>
+<span class="fc" id="L33">        long startTime = System.nanoTime();</span>
 
-<span class="fc" id="L34">        int i, j, k = 0;</span>
-<span class="fc" id="L35">        double[][][] data2 = new double[data.length][data[0].length][data[0][0].length];</span>
+<span class="fc" id="L35">        int iLen = data.length;</span>
+<span class="fc" id="L36">        int jLen = data[0].length;</span>
+<span class="fc" id="L37">        int kLen = data[0][0].length;</span>
+<span class="fc" id="L38">        double invD = 1.0 / d;</span>
 
-        BufferedWriter out;
+<span class="fc" id="L40">        double[][][] data2 = new double[iLen][jLen][kLen];</span>
+        // Threshold comparisons avoid a per-iteration division: (sum/kLen)&gt;10 ≡ sum&gt;10*kLen
+<span class="fc" id="L42">        double loThresh = 10.0 * kLen;</span>
+<span class="fc" id="L43">        double hiThresh = 50.0 * kLen;</span>
 
         // Write racing stats data into a file
-        try {
-<span class="fc" id="L41">            out = new BufferedWriter(new FileWriter(&quot;RacingStatsData.txt&quot;));</span>
+<span class="fc" id="L46">        try (BufferedWriter out = new BufferedWriter(new FileWriter(&quot;RacingStatsData.txt&quot;), 1 &lt;&lt; 16)) {</span>
 
-<span class="fc bfc" id="L43" title="All 2 branches covered.">            for (i = 0; i &lt; data.length; i++) {</span>
-<span class="fc bfc" id="L44" title="All 2 branches covered.">                for (j = 0; j &lt; data[0].length; j++) {</span>
-<span class="fc bfc" id="L45" title="All 2 branches covered.">                    for (k = 0; k &lt; data[0][0].length; k++) {</span>
-<span class="fc" id="L46">                        data2[i][j][k] = data[i][j][k] / d - Math.pow(limit[i][j], 2.0);</span>
+            // Compute phase: i-rows are independent — run across all available cores
+<span class="fc" id="L49">            IntStream.range(0, iLen).parallel().forEach(i -&gt; {</span>
+<span class="fc bfc" id="L50" title="All 2 branches covered.">                for (int j = 0; j &lt; jLen; j++) {</span>
+<span class="fc" id="L51">                    double[] srcRow = data[i][j];</span>
+<span class="fc" id="L52">                    double[] dstRow = data2[i][j];</span>
+<span class="fc" id="L53">                    double limitSq = limit[i][j] * limit[i][j];</span>
+<span class="fc" id="L54">                    double avgSrc = average(srcRow);</span>
+<span class="fc" id="L55">                    double runningSum = 0.0;</span>
 
-<span class="fc bfc" id="L48" title="All 4 branches covered.">                        if (average(data2[i][j]) &gt; 10 &amp;&amp; average(data2[i][j]) &lt; 50)</span>
-<span class="fc" id="L49">                            break;</span>
-<span class="fc bfc" id="L50" title="All 2 branches covered.">                        else if (Math.max(data[i][j][k], data2[i][j][k]) &gt; data[i][j][k])</span>
-<span class="fc" id="L51">                            break;</span>
-<span class="fc bfc" id="L52" title="All 2 branches covered.">                        else if (Math.pow(Math.abs(data[i][j][k]), 3) &lt; Math.pow(Math.abs(data2[i][j][k]), 3)</span>
-<span class="pc bpc" id="L53" title="1 of 4 branches missed.">                                &amp;&amp; average(data[i][j]) &lt; data2[i][j][k] &amp;&amp; (i + 1) * (j + 1) &gt; 0)</span>
-<span class="fc" id="L54">                            data2[i][j][k] *= 2;</span>
-                        else
-                            continue;
+<span class="fc bfc" id="L57" title="All 2 branches covered.">                    for (int k = 0; k &lt; kLen; k++) {</span>
+<span class="fc" id="L58">                        double val = srcRow[k] * invD - limitSq;</span>
+<span class="fc" id="L59">                        dstRow[k] = val;</span>
+<span class="fc" id="L60">                        double rsPlusVal = runningSum + val;</span>
+
+<span class="fc bfc" id="L62" title="All 4 branches covered.">                        if (rsPlusVal &gt; loThresh &amp;&amp; rsPlusVal &lt; hiThresh) {</span>
+<span class="fc" id="L63">                            break;</span>
+<span class="fc bfc" id="L64" title="All 2 branches covered.">                        } else if (val &gt; srcRow[k]) {</span>
+<span class="fc" id="L65">                            break;</span>
+<span class="fc bfc" id="L66" title="All 4 branches covered.">                        } else if (srcRow[k] * srcRow[k] &lt; val * val &amp;&amp; avgSrc &lt; val) {</span>
+                            // |a|&lt;|b|  ≡  a²&lt;b²  — avoids two Math.abs calls
+<span class="fc" id="L68">                            dstRow[k] = val * 2;</span>
+                        }
+<span class="fc" id="L70">                        runningSum += dstRow[k];</span>
                     }
                 }
-            }
+<span class="fc" id="L73">            });</span>
 
-<span class="fc bfc" id="L61" title="All 2 branches covered.">            for (i = 0; i &lt; data2.length; i++) {</span>
-<span class="fc bfc" id="L62" title="All 2 branches covered.">                for (j = 0; j &lt; data2[0].length; j++) {</span>
-<span class="fc" id="L63">                    out.write(data2[i][j] + &quot;\t&quot;);</span>
+            // Write phase: sequential — BufferedWriter is not thread-safe
+<span class="fc bfc" id="L76" title="All 2 branches covered.">            for (int i = 0; i &lt; iLen; i++) {</span>
+<span class="fc bfc" id="L77" title="All 2 branches covered.">                for (int j = 0; j &lt; jLen; j++) {</span>
+<span class="fc" id="L78">                    out.write(data2[i][j] + &quot;\t&quot;);</span>
                 }
             }
 
-<span class="fc" id="L67">            out.close();</span>
+<span class="fc" id="L82">            long endTime = System.nanoTime();</span>
+<span class="fc" id="L83">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
+<span class="fc" id="L84">            System.out.println(&quot;calculate() completed in &quot; + elapsedMs + &quot; ms&quot;);</span>
 
-<span class="fc" id="L69">            long endTime = System.nanoTime();</span>
-<span class="fc" id="L70">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
-<span class="fc" id="L71">            System.out.println(&quot;calculate() completed in &quot; + elapsedMs + &quot; ms&quot;);</span>
-
-<span class="fc" id="L73">        } catch (Exception e) {</span>
-<span class="fc" id="L74">            System.out.println(&quot;Error= &quot; + e);</span>
-<span class="fc" id="L75">            long endTime = System.nanoTime();</span>
-<span class="fc" id="L76">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
-<span class="fc" id="L77">            System.out.println(&quot;calculate() failed after &quot; + elapsedMs + &quot; ms&quot;);</span>
+<span class="fc" id="L86">        } catch (Exception e) {</span>
+<span class="fc" id="L87">            System.out.println(&quot;Error= &quot; + e);</span>
+<span class="fc" id="L88">            long endTime = System.nanoTime();</span>
+<span class="fc" id="L89">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
+<span class="fc" id="L90">            System.out.println(&quot;calculate() failed after &quot; + elapsedMs + &quot; ms&quot;);</span>
         }
-<span class="fc" id="L79">    }</span>
+<span class="fc" id="L92">    }</span>
     
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.10.202304240956</span></div></body></html>
