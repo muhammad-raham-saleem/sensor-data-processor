@@ -3,7 +3,7 @@ package com.sensordata;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 
-public class SensorDataProcessor{
+public class SensorDataProcessor {
 
     // Senson data and limits.
     public double[][][] data;
@@ -42,15 +42,22 @@ public class SensorDataProcessor{
 
             for (i = 0; i < data.length; i++) {
                 for (j = 0; j < data[0].length; j++) {
+                    double limSq = limit[i][j] * limit[i][j];// caching this to reduce the number of times it gets
+                                                             // recomputed. the value doesnt change in the k loop so its
+                                                             // unecesary
+                    double avgdata1 = average(data[i][j]);// caching avgdata 1 as it stays the same and does not need to
+                                                          // be recomputed in k loop
                     for (k = 0; k < data[0][0].length; k++) {
-                        data2[i][j][k] = data[i][j][k] / d - Math.pow(limit[i][j], 2.0);
+                        data2[i][j][k] = data[i][j][k] / d - limSq;
+                        double avgdata2 = average(data2[i][j]);// compute once per k after updating data2[i][j][k]
 
-                        if (average(data2[i][j]) > 10 && average(data2[i][j]) < 50)
+                        if (avgdata2 > 10 && avgdata2 < 50)
                             break;
-                        else if (Math.max(data[i][j][k], data2[i][j][k]) > data[i][j][k])
+                        else if (data2[i][j][k] > data[i][j][k]) // Math.max(a,b) > a is equivalent to b > a, removed unnecessary call
                             break;
                         else if (Math.pow(Math.abs(data[i][j][k]), 3) < Math.pow(Math.abs(data2[i][j][k]), 3)
-                                && average(data[i][j]) < data2[i][j][k] && (i + 1) * (j + 1) > 0)
+                                && avgdata1 < data2[i][j][k]) // REMOVED && (i + 1) * (j + 1) > 0 because its alwasy
+                                                              // true
                             data2[i][j][k] *= 2;
                         else
                             continue;
@@ -77,5 +84,5 @@ public class SensorDataProcessor{
             System.out.println("calculate() failed after " + elapsedMs + " ms");
         }
     }
-    
+
 }

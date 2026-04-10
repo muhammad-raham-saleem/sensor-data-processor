@@ -3,7 +3,7 @@
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 
-public class SensorDataProcessor{
+public class SensorDataProcessor {
 
     // Senson data and limits.
     public double[][][] data;
@@ -42,41 +42,48 @@ public class SensorDataProcessor{
 
 <span class="fc bfc" id="L43" title="All 2 branches covered.">            for (i = 0; i &lt; data.length; i++) {</span>
 <span class="fc bfc" id="L44" title="All 2 branches covered.">                for (j = 0; j &lt; data[0].length; j++) {</span>
-<span class="fc bfc" id="L45" title="All 2 branches covered.">                    for (k = 0; k &lt; data[0][0].length; k++) {</span>
-<span class="fc" id="L46">                        data2[i][j][k] = data[i][j][k] / d - Math.pow(limit[i][j], 2.0);</span>
+<span class="fc" id="L45">                    double limSq = limit[i][j] * limit[i][j];// caching this to reduce the number of times it gets</span>
+                                                             // recomputed. the value doesnt change in the k loop so its
+                                                             // unecesary
+<span class="fc" id="L48">                    double avgdata1 = average(data[i][j]);// caching avgdata 1 as it stays the same and does not need to</span>
+                                                          // be recomputed in k loop
+<span class="fc bfc" id="L50" title="All 2 branches covered.">                    for (k = 0; k &lt; data[0][0].length; k++) {</span>
+<span class="fc" id="L51">                        data2[i][j][k] = data[i][j][k] / d - limSq;</span>
+<span class="fc" id="L52">                        double avgdata2 = average(data2[i][j]);// compute once per k after updating data2[i][j][k]</span>
 
-<span class="fc bfc" id="L48" title="All 4 branches covered.">                        if (average(data2[i][j]) &gt; 10 &amp;&amp; average(data2[i][j]) &lt; 50)</span>
-<span class="fc" id="L49">                            break;</span>
-<span class="fc bfc" id="L50" title="All 2 branches covered.">                        else if (Math.max(data[i][j][k], data2[i][j][k]) &gt; data[i][j][k])</span>
-<span class="fc" id="L51">                            break;</span>
-<span class="fc bfc" id="L52" title="All 2 branches covered.">                        else if (Math.pow(Math.abs(data[i][j][k]), 3) &lt; Math.pow(Math.abs(data2[i][j][k]), 3)</span>
-<span class="pc bpc" id="L53" title="1 of 4 branches missed.">                                &amp;&amp; average(data[i][j]) &lt; data2[i][j][k] &amp;&amp; (i + 1) * (j + 1) &gt; 0)</span>
-<span class="fc" id="L54">                            data2[i][j][k] *= 2;</span>
+<span class="fc bfc" id="L54" title="All 4 branches covered.">                        if (avgdata2 &gt; 10 &amp;&amp; avgdata2 &lt; 50)</span>
+<span class="fc" id="L55">                            break;</span>
+<span class="fc bfc" id="L56" title="All 2 branches covered.">                        else if (data2[i][j][k] &gt; data[i][j][k]) // Math.max(a,b) &gt; a is equivalent to b &gt; a, removed unnecessary call</span>
+<span class="fc" id="L57">                            break;</span>
+<span class="fc bfc" id="L58" title="All 2 branches covered.">                        else if (Math.pow(Math.abs(data[i][j][k]), 3) &lt; Math.pow(Math.abs(data2[i][j][k]), 3)</span>
+<span class="fc bfc" id="L59" title="All 2 branches covered.">                                &amp;&amp; avgdata1 &lt; data2[i][j][k]) // REMOVED &amp;&amp; (i + 1) * (j + 1) &gt; 0 because its alwasy</span>
+                                                              // true
+<span class="fc" id="L61">                            data2[i][j][k] *= 2;</span>
                         else
                             continue;
                     }
                 }
             }
 
-<span class="fc bfc" id="L61" title="All 2 branches covered.">            for (i = 0; i &lt; data2.length; i++) {</span>
-<span class="fc bfc" id="L62" title="All 2 branches covered.">                for (j = 0; j &lt; data2[0].length; j++) {</span>
-<span class="fc" id="L63">                    out.write(data2[i][j] + &quot;\t&quot;);</span>
+<span class="fc bfc" id="L68" title="All 2 branches covered.">            for (i = 0; i &lt; data2.length; i++) {</span>
+<span class="fc bfc" id="L69" title="All 2 branches covered.">                for (j = 0; j &lt; data2[0].length; j++) {</span>
+<span class="fc" id="L70">                    out.write(data2[i][j] + &quot;\t&quot;);</span>
                 }
             }
 
-<span class="fc" id="L67">            out.close();</span>
+<span class="fc" id="L74">            out.close();</span>
 
-<span class="fc" id="L69">            long endTime = System.nanoTime();</span>
-<span class="fc" id="L70">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
-<span class="fc" id="L71">            System.out.println(&quot;calculate() completed in &quot; + elapsedMs + &quot; ms&quot;);</span>
+<span class="fc" id="L76">            long endTime = System.nanoTime();</span>
+<span class="fc" id="L77">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
+<span class="fc" id="L78">            System.out.println(&quot;calculate() completed in &quot; + elapsedMs + &quot; ms&quot;);</span>
 
-<span class="fc" id="L73">        } catch (Exception e) {</span>
-<span class="fc" id="L74">            System.out.println(&quot;Error= &quot; + e);</span>
-<span class="fc" id="L75">            long endTime = System.nanoTime();</span>
-<span class="fc" id="L76">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
-<span class="fc" id="L77">            System.out.println(&quot;calculate() failed after &quot; + elapsedMs + &quot; ms&quot;);</span>
+<span class="fc" id="L80">        } catch (Exception e) {</span>
+<span class="fc" id="L81">            System.out.println(&quot;Error= &quot; + e);</span>
+<span class="fc" id="L82">            long endTime = System.nanoTime();</span>
+<span class="fc" id="L83">            long elapsedMs = (endTime - startTime) / 1_000_000;</span>
+<span class="fc" id="L84">            System.out.println(&quot;calculate() failed after &quot; + elapsedMs + &quot; ms&quot;);</span>
         }
-<span class="fc" id="L79">    }</span>
-    
+<span class="fc" id="L86">    }</span>
+
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.10.202304240956</span></div></body></html>
